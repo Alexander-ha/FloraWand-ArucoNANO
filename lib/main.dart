@@ -248,6 +248,10 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   }
 
   void _processImage(CameraImage image) async {
+    print("===== _processImage called =====");
+    print("Image format: ${image.format.raw}");
+    print("Size: ${image.width}x${image.height}");
+
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == null) return;
 
@@ -401,7 +405,9 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       cameraDescription,
       kIsWeb ? ResolutionPreset.max : ResolutionPreset.high,
       enableAudio: enableAudio,
-      imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.yuv420
+          : ImageFormatGroup.bgra8888,
     );
 
     controller = cameraController;

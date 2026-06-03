@@ -107,37 +107,52 @@ Uint8List nv21ToRGBA8888(CameraImage image) {
   final int frameSize = width * height;
   final rgbaBuffer = Uint8List(frameSize * 4);
 
+  if (image.planes.length < 2) {
+    print("ERROR: Expected at least 2 planes, got ${image.planes.length}");
+    return rgbaBuffer;
+  }
+
+  final yPlane = image.planes[0].bytes;
+  final uvPlane = image.planes[1].bytes;
+
+  final yRowStride = image.planes[0].bytesPerRow;
+  final yPixelStride = image.planes[0].bytesPerPixel ?? 1;
+
+  final uvRowStride = image.planes[1].bytesPerRow;
+  final uvPixelStride = image.planes[1].bytesPerPixel ?? 2;
+
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
-      final int yIndex = y * width + x;
-      final int uvIndex = frameSize + (y >> 1) * width + (x >> 1) * 2;
+      final int yIndex = y * yRowStride + x * yPixelStride;
+      final int uvIndex = (y ~/ 2) * uvRowStride + (x ~/ 2) * uvPixelStride;
+      if (yIndex >= yPlane.length) continue;
+      if (uvIndex + 1 >= uvPlane.length) continue;
 
-      final yValue = image.planes[0].bytes[yIndex];
-      final vValue = image.planes[2].bytes[uvIndex];
-      final uValue = image.planes[1].bytes[uvIndex + 1];
+      final int yValue = yPlane[yIndex];
+      final int vValue = uvPlane[uvIndex];
+      final int uValue = uvPlane[uvIndex + 1];
 
-      final r = (yValue + 1.402 * (vValue - 128)).round();
-      final g = (yValue - 0.344136 * (uValue - 128) - 0.714136 * (vValue - 128)).round();
-      final b = (yValue + 1.772 * (uValue - 128)).round();
+      int r = (yValue + 1.402 * (vValue - 128)).toInt();
+      int g = (yValue - 0.344136 * (uValue - 128) - 0.714136 * (vValue - 128)).toInt();
+      int b = (yValue + 1.772 * (uValue - 128)).toInt();
 
-      final int index = yIndex * 4;
-      rgbaBuffer[index + 0] = r.clamp(0, 255);
-      rgbaBuffer[index + 1] = g.clamp(0, 255);
-      rgbaBuffer[index + 2] = b.clamp(0, 255);
-      rgbaBuffer[index + 3] = 255;
+      final int rgbaIndex = (y * width + x) * 4;
+      rgbaBuffer[rgbaIndex] = r.clamp(0, 255);
+      rgbaBuffer[rgbaIndex + 1] = g.clamp(0, 255);
+      rgbaBuffer[rgbaIndex + 2] = b.clamp(0, 255);
+      rgbaBuffer[rgbaIndex + 3] = 255;
     }
   }
 
   return rgbaBuffer;
 }
-
 Uint8List bgraToRgbaInPlace(Uint8List bgra) {
-    final out = Uint8List(bgra.length);
-    for (int i = 0; i < bgra.length; i += 4) {
-      out[i] = bgra[i + 2]; // R
-      out[i + 1] = bgra[i + 1]; // G
-      out[i + 2] = bgra[i]; // B
-      out[i + 3] = bgra[i + 3]; // A
-    }
-    return out;
+  final out = Uint8List(bgra.length);
+  for (int i = 0; i < bgra.length; i += 4) {
+    out[i] = bgra[i + 2]; // B -> R
+    out[i + 1] = bgra[i + 1]; // G -> G
+    out[i + 2] = bgra[i]; // R -> B
+    out[i + 3] = bgra[i + 3]; // A
   }
+  return out;
+}
