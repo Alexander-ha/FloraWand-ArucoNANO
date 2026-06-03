@@ -1,7 +1,4 @@
-# camera_demo
+# FloraWand ArucoNanon implementation
 
-Flutter camera demo to interact with opencv
+Flutter app with FFI module
 
-## Screenshots
-
-![screenshot](images/demo.jpg)
