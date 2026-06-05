@@ -374,17 +374,17 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     try {
       bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
       final detectorStopwatch = Stopwatch()..start();
-
       final markers = _arucoDetector.detect(bgr.data, bgr.width, bgr.height);
-
       detectorStopwatch.stop();
       final detectorTimeMs = detectorStopwatch.elapsedMicroseconds / 1000.0;
+
       if (markers.isNotEmpty) {
         _lastDetectedIds = markers.map((m) => m.id.toString()).join(', ');
+
+        print('✅ ArucoNano detection: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [${_lastDetectedIds}] | Size: ${bgr.width}x${bgr.height}');
       } else {
         _lastDetectedIds = 'none';
       }
-      print('🔍 ArucoNano detection time: ${detectorTimeMs.toStringAsFixed(3)} ms (${markers.length} markers found)');
 
       setState(() {
         _detectedMarkers = markers;
