@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'dart:ffi';
 
 import 'package:camera/camera.dart';
 import 'package:flora_nano_aruco/input_image.dart';
@@ -52,6 +53,8 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   CameraController? controller;
   bool enableAudio = true;
+  late ArucoDetector _arucoDetector;
+  List<ArucoMarker> _detectedMarkers = [];
 
   final _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -64,6 +67,10 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   double _maxAvailableZoom = 1.0;
   double _currentScale = 1.0;
   double _baseScale = 1.0;
+  int frameSkip = 0;
+  int processN = 1;
+  double _lastProcessingTimeMs = 0.0;
+  String _lastDetectedIds = '';
 
   ui.Image? _opencvPreviewImage;
 
@@ -74,10 +81,12 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _arucoDetector = ArucoDetector();
   }
 
   @override
   void dispose() {
+    _arucoDetector.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -134,10 +143,10 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
                     child: _opencvPreviewImage == null
                         ? const Text("waiting...")
                         : RawImage(
-                            image: _opencvPreviewImage,
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.low,
-                          )),
+                      image: _opencvPreviewImage,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
+                    )),
               ),
             ],
           ),
@@ -147,6 +156,23 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
             child: Row(
               children: <Widget>[
                 _cameraTogglesRowWidget(),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            color: Colors.black54,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Text(
+                  'Processing: ${_lastProcessingTimeMs.toStringAsFixed(1)} ms',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+                Text(
+                  'IDs: $_lastDetectedIds',
+                  style: const TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ),
@@ -203,10 +229,10 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   }
 
   Future<ui.Image> _rgbaBytesToImage(
-    Uint8List data,
-    int w,
-    int h,
-  ) async {
+      Uint8List data,
+      int w,
+      int h,
+      ) async {
     // Always feed RGBA to avoid bgra8888 issues on Chrome.
     final immutable = await ui.ImmutableBuffer.fromUint8List(data);
     ui.ImageDescriptor desc = ui.ImageDescriptor.raw(
@@ -246,11 +272,60 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   Widget _opencvControlWidget() {
     return Container();
   }
+  Future<ui.Image> _drawMarkersOnImage(ui.Image sourceImage, List<ArucoMarker> markers, ui.Size imageSize) async {
+    if (markers.isEmpty) return sourceImage;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    canvas.drawImage(sourceImage, Offset.zero, Paint());
+
+    final paint = Paint()
+      ..color = const ui.Color.fromARGB(255, 255, 0, 0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+
+    final scaleX = imageSize.width / sourceImage.width;
+    final scaleY = imageSize.height / sourceImage.height;
+
+    for (final marker in markers) {
+      final path = Path();
+      for (int i = 0; i < marker.corners.length; i++) {
+        final point = Offset(
+            marker.corners[i].dx * scaleX,
+            marker.corners[i].dy * scaleY
+        );
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(path, paint);
+
+      final centerX = marker.corners.map((c) => c.dx).reduce((a, b) => a + b) / 4 * scaleX;
+      final centerY = marker.corners.map((c) => c.dy).reduce((a, b) => a + b) / 4 * scaleY;
+
+      final textStyle = ui.ParagraphStyle(fontSize: 20, fontWeight: FontWeight.bold);
+      final paragraphBuilder = ui.ParagraphBuilder(textStyle)
+        ..pushStyle(ui.TextStyle(color: const ui.Color.fromARGB(255, 0, 255, 0), fontSize: 20))
+        ..addText('ID: ${marker.id}');
+      final paragraph = paragraphBuilder.build();
+      paragraph.layout(const ui.ParagraphConstraints(width: 200));
+      canvas.drawParagraph(paragraph, Offset(centerX - 30, centerY - 20));
+    }
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(sourceImage.width, sourceImage.height);
+    return img;
+  }
 
   void _processImage(CameraImage image) async {
-    print("===== _processImage called =====");
-    print("Image format: ${image.format.raw}");
-    print("Size: ${image.width}x${image.height}");
+    frameSkip++;
+    if (frameSkip % processN != 0) {
+      return;
+    }
 
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == null) return;
@@ -271,60 +346,70 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
     final sensorOrientation = controller?.description.sensorOrientation;
     var rotationCompensation = _orientations[controller?.value.deviceOrientation];
-    if (rotationCompensation == null || sensorOrientation == null) return;
-    if (controller?.description.lensDirection == CameraLensDirection.front) {
-      // front-facing
-      rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
-    } else {
-      // back-facing
-      rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
+    if (rotationCompensation != null && sensorOrientation != null) {
+      if (controller?.description.lensDirection == CameraLensDirection.front) {
+        rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
+      } else {
+        rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
+      }
+
+      switch (rotationCompensation) {
+        case 90:
+          await cv.rotateAsync(mat, cv.ROTATE_90_CLOCKWISE, dst: mat);
+          break;
+        case 180:
+          await cv.rotateAsync(mat, cv.ROTATE_180, dst: mat);
+          break;
+        case 270:
+          await cv.rotateAsync(mat, cv.ROTATE_90_COUNTERCLOCKWISE, dst: mat);
+          break;
+      }
     }
-    switch (rotationCompensation) {
-      case 90:
-        await cv.rotateAsync(mat, cv.ROTATE_90_CLOCKWISE, dst: mat);
-      case 180:
-        await cv.rotateAsync(mat, cv.ROTATE_180, dst: mat);
-      case 270:
-        await cv.rotateAsync(mat, cv.ROTATE_90_COUNTERCLOCKWISE, dst: mat);
-      default:
+
+    final targetWidth = mat.width ~/ 2;
+    final targetHeight = mat.height ~/ 2;
+    await cv.resizeAsync(mat, (targetWidth, targetHeight), dst: mat);
+
+    cv.Mat? bgr;
+    try {
+      bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
+      final detectorStopwatch = Stopwatch()..start();
+
+      final markers = _arucoDetector.detect(bgr.data, bgr.width, bgr.height);
+
+      detectorStopwatch.stop();
+      final detectorTimeMs = detectorStopwatch.elapsedMicroseconds / 1000.0;
+      if (markers.isNotEmpty) {
+        _lastDetectedIds = markers.map((m) => m.id.toString()).join(', ');
+      } else {
+        _lastDetectedIds = 'none';
+      }
+      print('🔍 ArucoNano detection time: ${detectorTimeMs.toStringAsFixed(3)} ms (${markers.length} markers found)');
+
+      setState(() {
+        _detectedMarkers = markers;
+        _lastProcessingTimeMs = detectorTimeMs;
+      });
+
+      final rgba = await cv.cvtColorAsync(bgr, cv.COLOR_BGR2RGBA);
+      ui.Image uiImage = await rgba.toUiImage();
+      rgba.dispose();
+
+      if (markers.isNotEmpty) {
+        final imageSize = ui.Size(bgr.width.toDouble(), bgr.height.toDouble());
+        uiImage = await _drawMarkersOnImage(uiImage, markers, imageSize);
+      }
+
+      setState(() {
+        _opencvPreviewImage = uiImage;
+      });
+    } catch (e) {
+      print('Detection error: $e');
+    } finally {
+      bgr?.dispose();
+      mat.dispose();
     }
-
-    // downsampling
-    await cv.resizeAsync(mat, (mat.width ~/ 2, mat.height ~/ 2), dst: mat);
-
-    // simulate object detection drawing
-    final x = Random().nextInt(50);
-    final y = Random().nextInt(50);
-    await cv.rectangleAsync(
-      mat,
-      cv.Rect(
-        x,
-        y,
-        Random().nextInt(mat.width),
-        Random().nextInt(mat.height),
-      ),
-      cv.Scalar.red,
-      thickness: 3,
-    );
-    await cv.putTextAsync(
-      mat,
-      'Hello World',
-      cv.Point(x, y),
-      cv.FONT_HERSHEY_SIMPLEX,
-      1,
-      cv.Scalar.blue,
-      thickness: 3,
-    );
-
-    // convert to ui.Image
-    final uiImage = await mat.toUiImage();
-    mat.dispose();
-
-    setState(() {
-      _opencvPreviewImage = uiImage;
-    });
   }
-
   /// Display a row of toggle to select the camera (or a message if no camera is available).
   Widget _cameraTogglesRowWidget() {
     final cameraController = controller;
@@ -434,18 +519,18 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
         case 'CameraAccessDenied':
           showInSnackBar('You have denied camera access.');
         case 'CameraAccessDeniedWithoutPrompt':
-          // iOS only
+        // iOS only
           showInSnackBar('Please go to Settings app to enable camera access.');
         case 'CameraAccessRestricted':
-          // iOS only
+        // iOS only
           showInSnackBar('Camera access is restricted.');
         case 'AudioAccessDenied':
           showInSnackBar('You have denied audio access.');
         case 'AudioAccessDeniedWithoutPrompt':
-          // iOS only
+        // iOS only
           showInSnackBar('Please go to Settings app to enable audio access.');
         case 'AudioAccessRestricted':
-          // iOS only
+        // iOS only
           showInSnackBar('Audio access is restricted.');
         default:
           _showCameraException(e);
