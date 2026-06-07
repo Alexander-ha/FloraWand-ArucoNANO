@@ -4,8 +4,8 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'dart:ui' as ui;
+import 'dart:ffi';
 
 import 'package:camera/camera.dart';
 import 'package:flora_nano_aruco/input_image.dart';
@@ -22,7 +22,7 @@ class CameraExampleHome extends StatefulWidget {
   const CameraExampleHome({super.key});
 
   @override
-  State<CameraExampleHome> createState() {
+  State createState() {
     return _CameraExampleHomeState();
   }
 }
@@ -37,9 +37,6 @@ IconData getCameraLensIcon(CameraLensDirection direction) {
     case CameraLensDirection.external:
       return Icons.camera;
   }
-  // This enum is from a different package, so a new value could be added at
-  // any time. The example should keep working if that happens.
-  // ignore: dead_code
   return Icons.camera;
 }
 
@@ -52,6 +49,9 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   CameraController? controller;
   bool enableAudio = true;
+  late ArucoDetector _arucoDetector;
+  List _detectedMarkersNano = [];
+  List _detectedMarkersClassic = [];
 
   final _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -64,8 +64,18 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   double _maxAvailableZoom = 1.0;
   double _currentScale = 1.0;
   double _baseScale = 1.0;
-
-  ui.Image? _opencvPreviewImage;
+  int frameSkip = 0;
+  int processN = 1;
+  
+  // Для ArUco Nano (правая панель)
+  double _lastProcessingTimeNano = 0.0;
+  String _lastDetectedIdsNano = '';
+  ui.Image? _opencvPreviewImageNano;
+  
+  // Для классического ArUco (левая панель)
+  double _lastProcessingTimeClassic = 0.0;
+  String _lastDetectedIdsClassic = '';
+  ui.Image? _opencvPreviewImageClassic;
 
   // Counting pointers (number of user fingers on screen)
   int _pointers = 0;
@@ -74,20 +84,20 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _arucoDetector = ArucoDetector();
   }
 
   @override
   void dispose() {
+    _arucoDetector.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // #docregion AppLifecycle
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final CameraController? cameraController = controller;
 
-    // App state changed before we got the chance to initialize.
     if (cameraController == null || !cameraController.value.isInitialized) {
       return;
     }
@@ -98,54 +108,122 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       _initializeCameraController(cameraController.description);
     }
   }
-  // #enddocregion AppLifecycle
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Camera example'),
+        title: const Text('FloraWand - Dual ArUco Comparison'),
       ),
       body: Column(
-        children: <Widget>[
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    border: Border.all(
-                      color: controller != null && controller!.value.isRecordingVideo
-                          ? Colors.redAccent
-                          : Colors.grey,
-                      width: 3.0,
+        children: [
+          // ВЕРХНЯЯ ЧАСТЬ - СЫРАЯ КАМЕРА
+          Expanded(
+            flex: 2, // Занимает 2/5 экрана
+            child: Container(
+              margin: const EdgeInsets.all(5),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    color: Colors.blueGrey,
+                    child: const Text(
+                      'Raw Camera Feed',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: Center(
-                      child: _cameraPreviewWidget(),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: ColoredBox(
+                        color: Colors.black,
+                        child: _cameraPreviewWidget(),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-              Expanded(
-                child: _previewContainer(
-                    child: _opencvPreviewImage == null
-                        ? const Text("waiting...")
+            ),
+          ),
+          
+          // НИЖНЯЯ ЧАСТЬ - ДВЕ ОБРАБОТАННЫЕ ПАНЕЛИ
+          Expanded(
+            flex: 3, // Занимает 3/5 экрана
+            child: Row(
+              children: [
+                // ЛЕВАЯ ПАНЕЛЬ - Классический ArUco
+                Expanded(
+                  child: _previewContainer(
+                    title: 'Classic ArUco',
+                    child: _opencvPreviewImageClassic == null
+                        ? const Center(child: Text("Processing...", style: TextStyle(color: Colors.white)))
                         : RawImage(
-                            image: _opencvPreviewImage,
+                            image: _opencvPreviewImageClassic,
                             fit: BoxFit.cover,
                             filterQuality: FilterQuality.low,
-                          )),
-              ),
-            ],
+                          ),
+                  ),
+                ),
+                // ПРАВАЯ ПАНЕЛЬ - ArUco Nano
+                Expanded(
+                  child: _previewContainer(
+                    title: 'ArUco Nano',
+                    child: _opencvPreviewImageNano == null
+                        ? const Center(child: Text("Processing...", style: TextStyle(color: Colors.white)))
+                        : RawImage(
+                            image: _opencvPreviewImageNano,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.low,
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
+          
           _opencvControlWidget(),
+          
+          // Информация о детекции
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            color: Colors.black87,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text(
+                      'Classic: ${_lastProcessingTimeClassic.toStringAsFixed(1)} ms',
+                      style: const TextStyle(color: Colors.blue, fontSize: 14),
+                    ),
+                    Text(
+                      'IDs: $_lastDetectedIdsClassic',
+                      style: const TextStyle(color: Colors.blue, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.grey, height: 1),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Text(
+                      'Nano: ${_lastProcessingTimeNano.toStringAsFixed(1)} ms',
+                      style: const TextStyle(color: Colors.green, fontSize: 14),
+                    ),
+                    Text(
+                      'IDs: $_lastDetectedIdsNano',
+                      style: const TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
           Padding(
             padding: const EdgeInsets.all(5.0),
             child: Row(
-              children: <Widget>[
+              children: [
                 _cameraTogglesRowWidget(),
               ],
             ),
@@ -155,17 +233,18 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     );
   }
 
-  /// Display the preview from the camera (or a message if the preview is not available).
   Widget _cameraPreviewWidget() {
     final CameraController? cameraController = controller;
 
     if (cameraController == null || !cameraController.value.isInitialized) {
-      return const Text(
-        'Tap a camera',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 24.0,
-          fontWeight: FontWeight.w900,
+      return const Center(
+        child: Text(
+          'Tap a camera',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24.0,
+            fontWeight: FontWeight.w900,
+          ),
         ),
       );
     } else {
@@ -174,12 +253,14 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
         onPointerUp: (_) => _pointers--,
         child: CameraPreview(
           controller!,
-          child: LayoutBuilder(builder: (BuildContext context, BoxConstraints constraints) {
+          child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onScaleStart: _handleScaleStart,
               onScaleUpdate: _handleScaleUpdate,
-              onTapDown: (TapDownDetails details) => onViewFinderTap(details, constraints),
+              onTapDown: (TapDownDetails details) =>
+                  onViewFinderTap(details, constraints),
             );
           }),
         ),
@@ -187,58 +268,27 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     }
   }
 
-  void _handleScaleStart(ScaleStartDetails details) {
-    _baseScale = _currentScale;
-  }
-
-  Future<void> _handleScaleUpdate(ScaleUpdateDetails details) async {
-    // When there are not exactly two fingers on screen don't scale
-    if (controller == null || _pointers != 2) {
-      return;
-    }
-
-    _currentScale = (_baseScale * details.scale).clamp(_minAvailableZoom, _maxAvailableZoom);
-
-    await controller!.setZoomLevel(_currentScale);
-  }
-
-  Future<ui.Image> _rgbaBytesToImage(
-    Uint8List data,
-    int w,
-    int h,
-  ) async {
-    // Always feed RGBA to avoid bgra8888 issues on Chrome.
-    final immutable = await ui.ImmutableBuffer.fromUint8List(data);
-    ui.ImageDescriptor desc = ui.ImageDescriptor.raw(
-      immutable,
-      width: w,
-      height: h,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final codec = await desc.instantiateCodec();
-    final frame = await codec.getNextFrame();
-    return frame.image;
-  }
-
-  Future<ui.Image> _cvMatToImage(cv.Mat mat, {(int, int)? dstSize}) async {
-    final resized = dstSize == null ? mat : await cv.resizeAsync(mat, dstSize);
-    final rgba = await cv.cvtColorAsync(resized, cv.COLOR_BGR2RGBA);
-    resized.dispose();
-    final image = await _rgbaBytesToImage(rgba.data, rgba.width, rgba.height);
-    rgba.dispose();
-    return image;
-  }
-
-  Widget _previewContainer({required Widget child}) {
+  Widget _previewContainer({required Widget child, required String title}) {
     return Container(
       padding: const EdgeInsets.all(5),
       margin: const EdgeInsets.all(5),
-      child: AspectRatio(
-        aspectRatio: 9 / 16,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: ColoredBox(color: Colors.black, child: child),
-        ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            color: Colors.blueGrey,
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: ColoredBox(color: Colors.black, child: child),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -247,10 +297,61 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     return Container();
   }
 
-  void _processImage(CameraImage image) async {
-    print("===== _processImage called =====");
-    print("Image format: ${image.format.raw}");
-    print("Size: ${image.width}x${image.height}");
+  Future<ui.Image> _drawMarkersOnImage(
+      ui.Image sourceImage, List<dynamic> markers, ui.Size imageSize, Color markerColor) async {
+    if (markers.isEmpty) return sourceImage;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    canvas.drawImage(sourceImage, Offset.zero, Paint());
+
+    final paint = Paint()
+      ..color = markerColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+
+    final scaleX = imageSize.width / sourceImage.width;
+    final scaleY = imageSize.height / sourceImage.height;
+
+    for (final marker in markers) {
+      final path = Path();
+      for (int i = 0; i < marker.corners.length; i++) {
+        final point = Offset(
+          marker.corners[i].dx * scaleX,
+          marker.corners[i].dy * scaleY
+        );
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(path, paint);
+
+      final centerX = marker.corners.map((c) => c.dx).reduce((a, b) => a + b) / 4 * scaleX;
+      final centerY = marker.corners.map((c) => c.dy).reduce((a, b) => a + b) / 4 * scaleY;
+
+      final paragraphBuilder = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 20, fontWeight: FontWeight.bold))
+        ..pushStyle(ui.TextStyle(color: markerColor, fontSize: 20))
+        ..addText('ID: ${marker.id}');
+      final paragraph = paragraphBuilder.build();
+      paragraph.layout(const ui.ParagraphConstraints(width: 200));
+      canvas.drawParagraph(paragraph, Offset(centerX - 30, centerY - 20));
+    }
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(sourceImage.width, sourceImage.height);
+    return img;
+  }
+
+  // ОБРАБОТКА ДЛЯ КЛАССИЧЕСКОГО ArUco (ЛЕВАЯ ПАНЕЛЬ)
+  void _processImageClassicAruco(CameraImage image) async {
+    frameSkip++;
+    if (frameSkip % processN != 0) {
+      return;
+    }
 
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == null) return;
@@ -271,70 +372,213 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
     final sensorOrientation = controller?.description.sensorOrientation;
     var rotationCompensation = _orientations[controller?.value.deviceOrientation];
-    if (rotationCompensation == null || sensorOrientation == null) return;
-    if (controller?.description.lensDirection == CameraLensDirection.front) {
-      // front-facing
-      rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
-    } else {
-      // back-facing
-      rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
+    if (rotationCompensation != null && sensorOrientation != null) {
+      if (controller?.description.lensDirection == CameraLensDirection.front) {
+        rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
+      } else {
+        rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
+      }
+
+      switch (rotationCompensation) {
+        case 90:
+          await cv.rotateAsync(mat, cv.ROTATE_90_CLOCKWISE, dst: mat);
+          break;
+        case 180:
+          await cv.rotateAsync(mat, cv.ROTATE_180, dst: mat);
+          break;
+        case 270:
+          await cv.rotateAsync(mat, cv.ROTATE_90_COUNTERCLOCKWISE, dst: mat);
+          break;
+      }
     }
-    switch (rotationCompensation) {
-      case 90:
-        await cv.rotateAsync(mat, cv.ROTATE_90_CLOCKWISE, dst: mat);
-      case 180:
-        await cv.rotateAsync(mat, cv.ROTATE_180, dst: mat);
-      case 270:
-        await cv.rotateAsync(mat, cv.ROTATE_90_COUNTERCLOCKWISE, dst: mat);
-      default:
+
+    final targetWidth = mat.width ~/ 2;
+    final targetHeight = mat.height ~/ 2;
+    await cv.resizeAsync(mat, (targetWidth, targetHeight), dst: mat);
+
+    cv.Mat? bgr;
+    try {
+      bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
+      
+      // КЛАССИЧЕСКАЯ ДЕТЕКЦИЯ ArUco ЧЕРЕЗ OPENCV
+      final detectorStopwatch = Stopwatch()..start();
+      
+      // Используем встроенный детектор ArUco из OpenCV
+      final dictionary = cv.aruco_Dictionary_get(cv.aruco_DICT_4X4_50);
+      final parameters = cv.aruco_DetectorParameters_create();
+      final corners = <List<cv.Point>>[];
+      final ids = <int>[];
+      final rejected = <List<cv.Point>>[];
+      
+      cv.aruco_detectMarkers(bgr, dictionary, corners, ids, parameters: parameters, rejectedImgPoints: rejected);
+      
+      detectorStopwatch.stop();
+      final detectorTimeMs = detectorStopwatch.elapsedMicroseconds / 1000.0;
+
+      // Преобразуем результаты в формат для отображения
+      final detectedMarkers = <dynamic>[];
+      for (int i = 0; i < ids.length; i++) {
+        detectedMarkers.add({
+          'id': ids[i],
+          'corners': corners[i].map((p) => Offset(p.x.toDouble(), p.y.toDouble())).toList(),
+        });
+      }
+
+      if (detectedMarkers.isNotEmpty) {
+        _lastDetectedIdsClassic = detectedMarkers.map((m) => m['id'].toString()).join(', ');
+        print('✅ Classic ArUco: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [$_lastDetectedIdsClassic]');
+      } else {
+        _lastDetectedIdsClassic = 'none';
+      }
+
+      setState(() {
+        _detectedMarkersClassic = detectedMarkers;
+        _lastProcessingTimeClassic = detectorTimeMs;
+      });
+
+      final rgba = await cv.cvtColorAsync(bgr, cv.COLOR_BGR2RGBA);
+      ui.Image uiImage = await rgba.toUiImage();
+      rgba.dispose();
+
+      if (detectedMarkers.isNotEmpty) {
+        final imageSize = ui.Size(bgr.width.toDouble(), bgr.height.toDouble());
+        uiImage = await _drawMarkersOnImage(uiImage, detectedMarkers, imageSize, Colors.red);
+      }
+
+      setState(() {
+        _opencvPreviewImageClassic = uiImage;
+      });
+      
+      dictionary?.release();
+      parameters?.release();
+    } catch (e) {
+      print('Classic ArUco Detection error: $e');
+    } finally {
+      bgr?.dispose();
+      mat.dispose();
     }
-
-    // downsampling
-    await cv.resizeAsync(mat, (mat.width ~/ 2, mat.height ~/ 2), dst: mat);
-
-    // simulate object detection drawing
-    final x = Random().nextInt(50);
-    final y = Random().nextInt(50);
-    await cv.rectangleAsync(
-      mat,
-      cv.Rect(
-        x,
-        y,
-        Random().nextInt(mat.width),
-        Random().nextInt(mat.height),
-      ),
-      cv.Scalar.red,
-      thickness: 3,
-    );
-    await cv.putTextAsync(
-      mat,
-      'Hello World',
-      cv.Point(x, y),
-      cv.FONT_HERSHEY_SIMPLEX,
-      1,
-      cv.Scalar.blue,
-      thickness: 3,
-    );
-
-    // convert to ui.Image
-    final uiImage = await mat.toUiImage();
-    mat.dispose();
-
-    setState(() {
-      _opencvPreviewImage = uiImage;
-    });
   }
 
-  /// Display a row of toggle to select the camera (or a message if no camera is available).
+  // ОБРАБОТКА ДЛЯ ArUco Nano (ПРАВАЯ ПАНЕЛЬ)
+  void _processImageNano(CameraImage image) async {
+    frameSkip++;
+    if (frameSkip % processN != 0) {
+      return;
+    }
+
+    final format = InputImageFormatValue.fromRawValue(image.format.raw);
+    if (format == null) return;
+
+    final bytes = switch (format) {
+      InputImageFormat.yuv_420_888 => yuv420ToRGBA8888(image),
+      InputImageFormat.nv21 => nv21ToRGBA8888(image),
+      InputImageFormat.bgra8888 => bgraToRgbaInPlace(image.planes.first.bytes),
+      _ => throw UnimplementedError(),
+    };
+
+    cv.Mat mat = cv.Mat.fromList(
+      image.height,
+      image.width,
+      cv.MatType.CV_8UC4,
+      bytes,
+    );
+
+    final sensorOrientation = controller?.description.sensorOrientation;
+    var rotationCompensation = _orientations[controller?.value.deviceOrientation];
+    if (rotationCompensation != null && sensorOrientation != null) {
+      if (controller?.description.lensDirection == CameraLensDirection.front) {
+        rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
+      } else {
+        rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
+      }
+
+      switch (rotationCompensation) {
+        case 90:
+          await cv.rotateAsync(mat, cv.ROTATE_90_CLOCKWISE, dst: mat);
+          break;
+        case 180:
+          await cv.rotateAsync(mat, cv.ROTATE_180, dst: mat);
+          break;
+        case 270:
+          await cv.rotateAsync(mat, cv.ROTATE_90_COUNTERCLOCKWISE, dst: mat);
+          break;
+      }
+    }
+
+    final targetWidth = mat.width ~/ 2;
+    final targetHeight = mat.height ~/ 2;
+    await cv.resizeAsync(mat, (targetWidth, targetHeight), dst: mat);
+
+    cv.Mat? bgr;
+    try {
+      bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
+      final detectorStopwatch = Stopwatch()..start();
+      final markers = _arucoDetector.detect(bgr.data, bgr.width, bgr.height);
+      detectorStopwatch.stop();
+      final detectorTimeMs = detectorStopwatch.elapsedMicroseconds / 1000.0;
+
+      if (markers.isNotEmpty) {
+        _lastDetectedIdsNano = markers.map((m) => m.id.toString()).join(', ');
+        print('✅ ArucoNano: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [$_lastDetectedIdsNano]');
+      } else {
+        _lastDetectedIdsNano = 'none';
+      }
+
+      setState(() {
+        _detectedMarkersNano = markers;
+        _lastProcessingTimeNano = detectorTimeMs;
+      });
+
+      final rgba = await cv.cvtColorAsync(bgr, cv.COLOR_BGR2RGBA);
+      ui.Image uiImage = await rgba.toUiImage();
+      rgba.dispose();
+
+      if (markers.isNotEmpty) {
+        final imageSize = ui.Size(bgr.width.toDouble(), bgr.height.toDouble());
+        uiImage = await _drawMarkersOnImage(uiImage, markers, imageSize, Colors.green);
+      }
+
+      setState(() {
+        _opencvPreviewImageNano = uiImage;
+      });
+    } catch (e) {
+      print('Nano Detection error: $e');
+    } finally {
+      bgr?.dispose();
+      mat.dispose();
+    }
+  }
+
+  void _handleScaleStart(ScaleStartDetails details) {
+    _baseScale = _currentScale;
+  }
+
+  Future<void> _handleScaleUpdate(ScaleUpdateDetails details) async {
+    if (_pointers == 2) {
+      return;
+    }
+    if (controller == null) {
+      return;
+    }
+
+    final CameraController cameraController = controller!;
+
+    final double scale = _baseScale * details.scale;
+    final double zoom = (scale - 1.0) * (_maxAvailableZoom - _minAvailableZoom) + _minAvailableZoom;
+
+    await cameraController.setZoomLevel(zoom);
+
+    _currentScale = scale;
+  }
+
   Widget _cameraTogglesRowWidget() {
     final cameraController = controller;
-    final List<Widget> toggles = <Widget>[];
+    final List<Widget> toggles = [];
 
     void onChanged(CameraDescription? description) {
       if (description == null) {
         return;
       }
-
       onNewCameraSelected(description);
     }
 
@@ -348,7 +592,7 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
         toggles.add(
           SizedBox(
             width: 150.0,
-            child: RadioListTile<CameraDescription>(
+            child: RadioListTile(
               title: Icon(getCameraLensIcon(cameraDescription.lensDirection)),
               groupValue: controller?.description,
               value: cameraDescription,
@@ -390,17 +634,20 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     cameraController.setFocusPoint(offset);
   }
 
-  Future<void> onNewCameraSelected(CameraDescription cameraDescription) async {
+  Future onNewCameraSelected(CameraDescription cameraDescription) async {
     if (controller != null) {
       await controller!.stopImageStream();
       await controller!.setDescription(cameraDescription);
-      await controller!.startImageStream(_processImage);
+      await controller!.startImageStream((image) {
+        _processImageClassicAruco(image);
+        _processImageNano(image);
+      });
     } else {
       return _initializeCameraController(cameraDescription);
     }
   }
 
-  Future<void> _initializeCameraController(CameraDescription cameraDescription) async {
+  Future _initializeCameraController(CameraDescription cameraDescription) async {
     final CameraController cameraController = CameraController(
       cameraDescription,
       kIsWeb ? ResolutionPreset.max : ResolutionPreset.high,
@@ -412,7 +659,6 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
     controller = cameraController;
 
-    // If the controller is updated then update the UI.
     cameraController.addListener(() {
       if (mounted) {
         setState(() {});
@@ -424,8 +670,11 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
     try {
       await cameraController.initialize();
-      await cameraController.startImageStream(_processImage);
-      await Future.wait(<Future<Object?>>[
+      await cameraController.startImageStream((image) {
+        _processImageClassicAruco(image);
+        _processImageNano(image);
+      });
+      await Future.wait([
         cameraController.getMaxZoomLevel().then((double value) => _maxAvailableZoom = value),
         cameraController.getMinZoomLevel().then((double value) => _minAvailableZoom = value),
       ]);
@@ -434,18 +683,14 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
         case 'CameraAccessDenied':
           showInSnackBar('You have denied camera access.');
         case 'CameraAccessDeniedWithoutPrompt':
-          // iOS only
           showInSnackBar('Please go to Settings app to enable camera access.');
         case 'CameraAccessRestricted':
-          // iOS only
           showInSnackBar('Camera access is restricted.');
         case 'AudioAccessDenied':
           showInSnackBar('You have denied audio access.');
         case 'AudioAccessDeniedWithoutPrompt':
-          // iOS only
           showInSnackBar('Please go to Settings app to enable audio access.');
         case 'AudioAccessRestricted':
-          // iOS only
           showInSnackBar('Audio access is restricted.');
         default:
           _showCameraException(e);
@@ -458,7 +703,7 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     }
   }
 
-  Future<void> onPausePreviewButtonPressed() async {
+  Future onPausePreviewButtonPressed() async {
     final CameraController? cameraController = controller;
 
     if (cameraController == null || !cameraController.value.isInitialized) {
@@ -467,7 +712,10 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     }
 
     if (cameraController.value.isPreviewPaused) {
-      await cameraController.startImageStream(_processImage);
+      await cameraController.startImageStream((image) {
+        _processImageClassicAruco(image);
+        _processImageNano(image);
+      });
       await cameraController.resumePreview();
     } else {
       await cameraController.stopImageStream();
@@ -498,15 +746,10 @@ class CameraApp extends StatelessWidget {
   }
 }
 
-List<CameraDescription> _cameras = <CameraDescription>[];
+List<CameraDescription> _cameras = [];
 
-Future<void> main() async {
-  // Fetch the available cameras before initializing the app.
-  try {
-    WidgetsFlutterBinding.ensureInitialized();
-    _cameras = await availableCameras();
-  } on CameraException catch (e) {
-    _logError(e.code, e.description);
-  }
+Future main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  _cameras = await availableCameras();
   runApp(const CameraApp());
 }
