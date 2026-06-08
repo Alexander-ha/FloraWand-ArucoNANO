@@ -22,6 +22,43 @@ set(FFMPEG_LIB_DIR "${OPENCV_BASE}/ffmpeg/lib")
 message(STATUS "OpenCV include: ${OpenCV_INCLUDE_DIRS}")
 message(STATUS "OpenCV lib dir: ${OpenCV_LIB_DIR}")
 
+set(OPTIMIZATION_FLAGS
+        -O3
+        -ffast-math
+        -funroll-loops
+        -fomit-frame-pointer
+        -flto
+        -DNDEBUG
+        -DARUCO_NANO_OPTIMIZED
+)
+
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    list(APPEND OPTIMIZATION_FLAGS -march=armv8-a+fp+simd -mtune=cortex-a76)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_CXX_FLAGS_RELEASE "")
+    set(CMAKE_C_FLAGS_RELEASE "")
+
+    foreach(flag ${OPTIMIZATION_FLAGS})
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${flag}")
+        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${flag}")
+    endforeach()
+
+    message(STATUS "Optimization flags enabled: ${OPTIMIZATION_FLAGS}")
+else()
+    set(CMAKE_CXX_FLAGS_DEBUG "-O2 -g")
+    set(CMAKE_C_FLAGS_DEBUG "-O2 -g")
+endif()
+
+if(ANDROID)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=default -fvisibility-inlines-hidden")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--gc-sections -Wl,--strip-all")
+endif()
+
+message(STATUS "Final CXX flags Release: ${CMAKE_CXX_FLAGS_RELEASE}")
+message(STATUS "Final CXX flags Debug: ${CMAKE_CXX_FLAGS_DEBUG}")
+
 add_library(aruco_detector SHARED aruco_detector.cpp)
 
 target_include_directories(aruco_detector PRIVATE
@@ -79,4 +116,8 @@ if(ANDROID)
             PREFIX "lib"
             SUFFIX ".so"
     )
+endif()
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
 endif()

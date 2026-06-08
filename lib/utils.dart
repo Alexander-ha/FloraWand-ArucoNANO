@@ -19,6 +19,7 @@ typedef CreateDetectorDart = Pointer<Void> Function();
 
 typedef DestroyDetectorNative = Void Function(Pointer<Void> handle);
 typedef DestroyDetectorDart = void Function(Pointer<Void> handle);
+
 typedef DetectMarkersNative = Int32 Function(
     Pointer<Void> handle,
     Pointer<Uint8> data,
@@ -27,6 +28,7 @@ typedef DetectMarkersNative = Int32 Function(
     Pointer<Int32> ids,
     Pointer<Float> corners,
     Int32 maxMarkers,
+    Pointer<Float> processingTime,
     );
 
 typedef DetectMarkersDart = int Function(
@@ -37,6 +39,7 @@ typedef DetectMarkersDart = int Function(
     Pointer<Int32> ids,
     Pointer<Float> corners,
     int maxMarkers,
+    Pointer<Float> processingTime,
     );
 
 final createDetector = nativeLib
@@ -79,15 +82,17 @@ class ArucoDetector {
     }
   }
 
-  List<ArucoMarker> detect(Uint8List imageData, int width, int height, {int maxMarkers = 10}) {
+  ({List<ArucoMarker> markers, double processingTimeMs}) detect(Uint8List imageData, int width, int height, {int maxMarkers = 10}) {
     if (_disposed) {
       throw StateError('Detector already disposed');
     }
 
     final result = <ArucoMarker>[];
+    double elapsedMs = 0.0;
 
     final idsPtr = calloc<Int32>(maxMarkers);
     final cornersPtr = calloc<Float>(maxMarkers * 8);
+    final processingTimePtr = calloc<Float>();
     final dataPtr = calloc<Uint8>(imageData.length);
     final nativeData = dataPtr.asTypedList(imageData.length);
     nativeData.setAll(0, imageData);
@@ -101,9 +106,12 @@ class ArucoDetector {
         idsPtr,
         cornersPtr,
         maxMarkers,
+        processingTimePtr,
       );
 
-      print('C++ detector returned $count markers');
+      elapsedMs = processingTimePtr.value;
+
+      print('C++ detector returned $count markers in ${elapsedMs.toStringAsFixed(3)} ms');
 
       for (int i = 0; i < count; i++) {
         final id = idsPtr[i];
@@ -123,12 +131,12 @@ class ArucoDetector {
       calloc.free(idsPtr);
       calloc.free(cornersPtr);
       calloc.free(dataPtr);
+      calloc.free(processingTimePtr);
     }
 
-    return result;
+    return (markers: result, processingTimeMs: elapsedMs);
   }
 }
-
 extension CvMatUiImageExtension on cv.Mat {
   Future<ui.Image> toUiImage({ui.PixelFormat format = ui.PixelFormat.rgba8888}) async {
     final immutable = await ui.ImmutableBuffer.fromUint8List(data);
@@ -143,7 +151,6 @@ extension CvMatUiImageExtension on cv.Mat {
     return frame.image;
   }
 }
-
 
 Uint8List yuv420ToNV21(CameraImage image) {
   final width = image.width;

@@ -49,7 +49,7 @@ set(CMAKE_MAKEFILE_DEPENDS
   "C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/build/cmake/hooks/pre/Android-Initialize.cmake"
   "C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/build/cmake/hooks/pre/Android.cmake"
   "C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/build/cmake/platforms.cmake"
-  "C:/Users/alexa/StudioProjects/flora_nano_aruco/native/CMakeLists.txt"
+  "C:/Users/alexa/StudioProjects/flora_nano_aruco/opencv_binding/CMakeLists.txt"
   "CMakeFiles/4.3.3/CMakeCCompiler.cmake"
   "CMakeFiles/4.3.3/CMakeCXXCompiler.cmake"
   "CMakeFiles/4.3.3/CMakeSystem.cmake"
@@ -68,5 +68,5 @@ set(CMAKE_MAKEFILE_PRODUCTS
 
 # Dependency information for all targets:
 set(CMAKE_DEPEND_INFO_FILES
-  "CMakeFiles/aruco_detector.dir/DependInfo.cmake"
+  "CMakeFiles/aruco_classic.dir/DependInfo.cmake"
   )

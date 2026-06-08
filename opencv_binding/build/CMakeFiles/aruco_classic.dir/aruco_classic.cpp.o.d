@@ -1,6 +1,6 @@
-CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
-  C:/Users/alexa/StudioProjects/flora_nano_aruco/native/aruco_detector.cpp \
-  C:/Users/alexa/StudioProjects/flora_nano_aruco/native/aruco_detector.h \
+CMakeFiles/aruco_classic.dir/aruco_classic.cpp.o: \
+  C:/Users/alexa/StudioProjects/flora_nano_aruco/opencv_binding/aruco_classic.cpp \
+  C:/Users/alexa/StudioProjects/flora_nano_aruco/opencv_binding/aruco_classic.h \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/stdint.h \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__config \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__config_site \
@@ -16,8 +16,8 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/stddef.h \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/lib/clang/17/include/stddef.h \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/lib/clang/17/include/__stddef_max_align_t.h \
-  C:/Users/alexa/StudioProjects/flora_nano_aruco/native/aruco_nano/aruco_nano.h \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/imgproc.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/opencv.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/opencv_modules.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/cvdef.h \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/version.hpp \
@@ -160,7 +160,6 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/lib/clang/17/include/arm_neon.h \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/lib/clang/17/include/arm_bf16.h \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/base.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/opencv_modules.hpp \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/climits \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/limits.h \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/lib/clang/17/include/limits.h \
@@ -748,7 +747,6 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/utility.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/optim.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/ovx.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/./imgproc/segmentation.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/calib3d.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/features2d.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/flann/miniflann.hpp \
@@ -759,15 +757,6 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/iostream \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/utils/logger.defines.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/utils/logtag.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/hal/intrin.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/hal/intrin_forward.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/hal/intrin_neon.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/hal/intrin_math.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/hal/simd_utils.impl.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/aruco_detector.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/aruco_dictionary.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/aruco_board.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/opencv.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/dnn.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/dnn/dnn.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/async.hpp \
@@ -813,9 +802,14 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/highgui.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/imgcodecs.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/videoio.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/imgproc.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/./imgproc/segmentation.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/ml.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/ml/ml.inl.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/aruco_detector.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/aruco_dictionary.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/aruco_board.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/graphical_code_detector.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/detection_based_tracker.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/objdetect/face.hpp \
@@ -843,4 +837,5 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video/tracking.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video/background_segm.hpp \
-  C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/android/log.h
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/aruco.hpp \
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/aruco/aruco_calib.hpp

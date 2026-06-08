@@ -6,5 +6,5 @@ CXX_DEFINES = -Daruco_detector_EXPORTS
 
 CXX_INCLUDES = -IC:\Users\alexa\AppData\Local\Pub\Cache\hosted\pub.dev\opencv_core-1.4.5\android\.cxx\Debug\4n16304y\arm64-v8a\_deps\libopencv-src\sdk\native\jni\include -IC:\Users\alexa\StudioProjects\flora_nano_aruco\native\include
 
-CXX_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -std=gnu++17 -fPIC
+CXX_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -fvisibility=default -fvisibility=default -fvisibility-inlines-hidden  -O3 -ffast-math -funroll-loops -fomit-frame-pointer -flto -DNDEBUG -DARUCO_NANO_OPTIMIZED -march=armv8-a+fp+simd -mtune=cortex-a76 -std=gnu++17 -fPIC
 

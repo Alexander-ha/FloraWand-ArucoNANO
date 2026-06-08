@@ -19,7 +19,8 @@ int detect_markers(
         int height,
         int* ids,
         float* corners,  // массив: [x1,y1, x2,y2, x3,y3, x4,y4 и тд] для каждого маркера
-        int max_markers
+        int max_markers,
+        float* processing_time_ms
 );//обертка функции, передает в аргументы псевдоним, рзамеры окон, ids, и прочее для аруко
 
 #ifdef __cplusplus

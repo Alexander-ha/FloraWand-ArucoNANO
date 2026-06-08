@@ -4,9 +4,7 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'dart:ui' as ui;
-import 'dart:ffi';
 
 import 'package:camera/camera.dart';
 import 'package:flora_nano_aruco/input_image.dart';
@@ -16,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:opencv_core/opencv.dart' as cv;
+import 'package:flora_nano_aruco/aruco_bridge.dart';
 
 /// Camera example home widget.
 class CameraExampleHome extends StatefulWidget {
@@ -23,7 +22,7 @@ class CameraExampleHome extends StatefulWidget {
   const CameraExampleHome({super.key});
 
   @override
-  State<CameraExampleHome> createState() {
+  State createState() {
     return _CameraExampleHomeState();
   }
 }
@@ -38,9 +37,6 @@ IconData getCameraLensIcon(CameraLensDirection direction) {
     case CameraLensDirection.external:
       return Icons.camera;
   }
-  // This enum is from a different package, so a new value could be added at
-  // any time. The example should keep working if that happens.
-  // ignore: dead_code
   return Icons.camera;
 }
 
@@ -49,12 +45,24 @@ void _logError(String code, String? message) {
   print('Error: $code${message == null ? '' : '\nError Message: $message'}');
 }
 
+enum DetectorType {
+  classic,
+  nano,
+}
+
 class _CameraExampleHomeState extends State<CameraExampleHome>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   CameraController? controller;
   bool enableAudio = true;
   late ArucoDetector _arucoDetector;
-  List<ArucoMarker> _detectedMarkers = [];
+  late ArucoClassicDetector _classicDetector;
+
+  DetectorType _activeDetector = DetectorType.classic;
+
+  double _lastProcessingTime = 0.0;
+  String _lastDetectedIds = '';
+  ui.Image? _processedPreviewImage;
+  List _detectedMarkers = [];
 
   final _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -67,12 +75,17 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   double _maxAvailableZoom = 1.0;
   double _currentScale = 1.0;
   double _baseScale = 1.0;
-  int frameSkip = 0;
-  int processN = 1;
-  double _lastProcessingTimeMs = 0.0;
-  String _lastDetectedIds = '';
 
-  ui.Image? _opencvPreviewImage;
+  int _frameCounter = 0;
+  bool _processing = false;
+  int _uiUpdateCounter = 0;
+  static const int _uiUpdateEveryNFrames = 2;
+  int _processEveryNthFrame = 2;
+
+  ui.Image? _lastProcessedImage;
+  List _lastMarkers = [];
+  double _lastProcTime = 0.0;
+  String _lastIds = '';
 
   // Counting pointers (number of user fingers on screen)
   int _pointers = 0;
@@ -82,21 +95,23 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _arucoDetector = ArucoDetector();
+    _classicDetector = ArucoClassicDetector();
   }
 
   @override
   void dispose() {
     _arucoDetector.dispose();
+    _classicDetector.dispose();
+    _lastProcessedImage?.dispose();
+    _processedPreviewImage?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // #docregion AppLifecycle
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final CameraController? cameraController = controller;
 
-    // App state changed before we got the chance to initialize.
     if (cameraController == null || !cameraController.value.isInitialized) {
       return;
     }
@@ -107,72 +122,145 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       _initializeCameraController(cameraController.description);
     }
   }
-  // #enddocregion AppLifecycle
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Camera example'),
-      ),
-      body: Column(
-        children: <Widget>[
-          Row(
-            children: [
-              Expanded(
+        title: const Text('FloraWand - ArUco Detector'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
+              child: GestureDetector(
+                onTap: _toggleDetector,
                 child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.black,
-                    border: Border.all(
-                      color: controller != null && controller!.value.isRecordingVideo
-                          ? Colors.redAccent
-                          : Colors.grey,
-                      width: 3.0,
-                    ),
+                    color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(1.0),
-                    child: Center(
-                      child: _cameraPreviewWidget(),
-                    ),
+                  child: Text(
+                    _activeDetector == DetectorType.classic ? 'Classic' : 'Nano',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-              Expanded(
-                child: _previewContainer(
-                    child: _opencvPreviewImage == null
-                        ? const Text("waiting...")
-                        : RawImage(
-                      image: _opencvPreviewImage,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.low,
-                    )),
-              ),
-            ],
+            ),
           ),
-          _opencvControlWidget(),
-          Padding(
-            padding: const EdgeInsets.all(5.0),
-            child: Row(
-              children: <Widget>[
-                _cameraTogglesRowWidget(),
+        ],
+      ),
+      body: Column(
+        children: [
+          // ОДНА КАМЕРА с обработанным изображением
+          Expanded(
+            flex: 3,
+            child: Container(
+              margin: const EdgeInsets.all(5),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _activeDetector == DetectorType.classic ? 'Classic ArUco (C++)' : 'ArUco Nano',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        Icon(
+                          _activeDetector == DetectorType.classic ? Icons.code : Icons.speed,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: ColoredBox(
+                        color: Colors.black,
+                        child: _processedPreviewImage == null
+                            ? const Center(
+                          child: Text(
+                            "Waiting for camera...",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        )
+                            : RawImage(
+                          image: _processedPreviewImage,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.low,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Информация о детекции
+          Container(
+            padding: const EdgeInsets.all(12.0),
+            color: Colors.black87,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _activeDetector == DetectorType.classic ? Icons.timer : Icons.speed,
+                      color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_activeDetector == DetectorType.classic ? "Classic" : "Nano"}: ${_lastProcessingTime.toStringAsFixed(1)} ms',
+                      style: TextStyle(
+                        color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    const Icon(Icons.qr_code, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'IDs: $_lastDetectedIds',
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Tap to switch detector',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(8.0),
-            color: Colors.black54,
+
+          Padding(
+            padding: const EdgeInsets.all(5.0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'Processing: ${_lastProcessingTimeMs.toStringAsFixed(1)} ms',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-                Text(
-                  'IDs: $_lastDetectedIds',
-                  style: const TextStyle(color: Colors.green, fontSize: 14, fontWeight: FontWeight.bold),
-                ),
+                _cameraTogglesRowWidget(),
               ],
             ),
           ),
@@ -181,17 +269,29 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     );
   }
 
-  /// Display the preview from the camera (or a message if the preview is not available).
+  void _toggleDetector() {
+    setState(() {
+      _activeDetector = _activeDetector == DetectorType.classic
+          ? DetectorType.nano
+          : DetectorType.classic;
+      _processedPreviewImage = null;
+      _lastDetectedIds = '';
+      _lastProcessingTime = 0.0;
+    });
+  }
+
   Widget _cameraPreviewWidget() {
     final CameraController? cameraController = controller;
 
     if (cameraController == null || !cameraController.value.isInitialized) {
-      return const Text(
-        'Tap a camera',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 24.0,
-          fontWeight: FontWeight.w900,
+      return const Center(
+        child: Text(
+          'Tap a camera',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24.0,
+            fontWeight: FontWeight.w900,
+          ),
         ),
       );
     } else {
@@ -200,135 +300,129 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
         onPointerUp: (_) => _pointers--,
         child: CameraPreview(
           controller!,
-          child: LayoutBuilder(builder: (BuildContext context, BoxConstraints constraints) {
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onScaleStart: _handleScaleStart,
-              onScaleUpdate: _handleScaleUpdate,
-              onTapDown: (TapDownDetails details) => onViewFinderTap(details, constraints),
-            );
-          }),
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onScaleStart: _handleScaleStart,
+                onScaleUpdate: _handleScaleUpdate,
+                onTapDown: (TapDownDetails details) =>
+                    onViewFinderTap(details, constraints),
+              );
+            },
+          ),
         ),
       );
     }
   }
 
-  void _handleScaleStart(ScaleStartDetails details) {
-    _baseScale = _currentScale;
-  }
+  void _processFrame(CameraImage image) async {
+    if (_processing) return;
 
-  Future<void> _handleScaleUpdate(ScaleUpdateDetails details) async {
-    // When there are not exactly two fingers on screen don't scale
-    if (controller == null || _pointers != 2) {
-      return;
-    }
+    _frameCounter++;
+    if (_frameCounter % _processEveryNthFrame != 0) return;
 
-    _currentScale = (_baseScale * details.scale).clamp(_minAvailableZoom, _maxAvailableZoom);
+    _processing = true;
 
-    await controller!.setZoomLevel(_currentScale);
-  }
-
-  Future<ui.Image> _rgbaBytesToImage(
-      Uint8List data,
-      int w,
-      int h,
-      ) async {
-    // Always feed RGBA to avoid bgra8888 issues on Chrome.
-    final immutable = await ui.ImmutableBuffer.fromUint8List(data);
-    ui.ImageDescriptor desc = ui.ImageDescriptor.raw(
-      immutable,
-      width: w,
-      height: h,
-      pixelFormat: ui.PixelFormat.rgba8888,
-    );
-    final codec = await desc.instantiateCodec();
-    final frame = await codec.getNextFrame();
-    return frame.image;
-  }
-
-  Future<ui.Image> _cvMatToImage(cv.Mat mat, {(int, int)? dstSize}) async {
-    final resized = dstSize == null ? mat : await cv.resizeAsync(mat, dstSize);
-    final rgba = await cv.cvtColorAsync(resized, cv.COLOR_BGR2RGBA);
-    resized.dispose();
-    final image = await _rgbaBytesToImage(rgba.data, rgba.width, rgba.height);
-    rgba.dispose();
-    return image;
-  }
-
-  Widget _previewContainer({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(5),
-      margin: const EdgeInsets.all(5),
-      child: AspectRatio(
-        aspectRatio: 9 / 16,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: ColoredBox(color: Colors.black, child: child),
-        ),
-      ),
-    );
-  }
-
-  Widget _opencvControlWidget() {
-    return Container();
-  }
-  Future<ui.Image> _drawMarkersOnImage(ui.Image sourceImage, List<ArucoMarker> markers, ui.Size imageSize) async {
-    if (markers.isEmpty) return sourceImage;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    canvas.drawImage(sourceImage, Offset.zero, Paint());
-
-    final paint = Paint()
-      ..color = const ui.Color.fromARGB(255, 255, 0, 0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-
-    final scaleX = imageSize.width / sourceImage.width;
-    final scaleY = imageSize.height / sourceImage.height;
-
-    for (final marker in markers) {
-      final path = Path();
-      for (int i = 0; i < marker.corners.length; i++) {
-        final point = Offset(
-            marker.corners[i].dx * scaleX,
-            marker.corners[i].dy * scaleY
-        );
-        if (i == 0) {
-          path.moveTo(point.dx, point.dy);
-        } else {
-          path.lineTo(point.dx, point.dy);
-        }
+    try {
+      if (_activeDetector == DetectorType.classic) {
+        await _processImageClassicOptimized(image);
+      } else {
+        await _processImageNanoOptimized(image);
       }
-      path.close();
-      canvas.drawPath(path, paint);
-
-      final centerX = marker.corners.map((c) => c.dx).reduce((a, b) => a + b) / 4 * scaleX;
-      final centerY = marker.corners.map((c) => c.dy).reduce((a, b) => a + b) / 4 * scaleY;
-
-      final textStyle = ui.ParagraphStyle(fontSize: 20, fontWeight: FontWeight.bold);
-      final paragraphBuilder = ui.ParagraphBuilder(textStyle)
-        ..pushStyle(ui.TextStyle(color: const ui.Color.fromARGB(255, 0, 255, 0), fontSize: 20))
-        ..addText('ID: ${marker.id}');
-      final paragraph = paragraphBuilder.build();
-      paragraph.layout(const ui.ParagraphConstraints(width: 200));
-      canvas.drawParagraph(paragraph, Offset(centerX - 30, centerY - 20));
+    } finally {
+      _processing = false;
     }
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(sourceImage.width, sourceImage.height);
-    return img;
   }
 
-  void _processImage(CameraImage image) async {
-    frameSkip++;
-    if (frameSkip % processN != 0) {
-      return;
-    }
+  Future<void> _processImageClassicOptimized(CameraImage image) async {
+    final mat = await _convertAndResizeImage(image, scale: 1); // Уменьшаем в 3 раза для скорости
+    if (mat == null) return;
 
+    cv.Mat? bgr;
+    try {
+      bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
+
+      final stopwatch = Stopwatch()..start();
+      final result = _classicDetector.detect(bgr.data, bgr.width, bgr.height);
+      stopwatch.stop();
+
+      final markers = result.markers;
+      final detectorTimeMs = result.processingTimeMs;
+
+      _lastProcTime = detectorTimeMs;
+      if (markers.isNotEmpty) {
+        _lastIds = markers.map((m) => m['id'].toString()).join(',');
+        if (kDebugMode) {
+          print('✅ Classic ArUco: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [$_lastIds]');
+        }
+      } else {
+        _lastIds = 'none';
+      }
+      _lastMarkers = markers;
+
+      // Обновляем UI не чаще чем _uiUpdateEveryNFrames
+      _uiUpdateCounter++;
+      if (_uiUpdateCounter >= _uiUpdateEveryNFrames) {
+        _uiUpdateCounter = 0;
+        await _updateUIWithImage(bgr, markers, Colors.blue);
+      }
+
+    } catch (e) {
+      if (kDebugMode) print('Classic error: $e');
+    } finally {
+      bgr?.dispose();
+      mat.dispose();
+    }
+  }
+
+  Future<void> _processImageNanoOptimized(CameraImage image) async {
+    final mat = await _convertAndResizeImage(image, scale: 1);
+    if (mat == null) return;
+
+    cv.Mat? bgr;
+    try {
+      bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
+
+      final result = _arucoDetector.detect(bgr.data, bgr.width, bgr.height);
+      final markers = result.markers;
+      final detectorTimeMs = result.processingTimeMs;
+
+      // Сохраняем результаты
+      _lastProcTime = detectorTimeMs;
+      if (markers.isNotEmpty) {
+        _lastIds = markers.map((m) => m.id.toString()).join(',');
+        if (kDebugMode) {
+          print('✅ ArUco Nano: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [$_lastIds]');
+        }
+      } else {
+        _lastIds = 'none';
+      }
+
+      final markersForDrawing = markers.map((m) => {
+        'id': m.id,
+        'corners': m.corners,
+      }).toList();
+      _lastMarkers = markersForDrawing;
+
+      // Обновляем UI
+      _uiUpdateCounter++;
+      if (_uiUpdateCounter >= _uiUpdateEveryNFrames) {
+        _uiUpdateCounter = 0;
+        await _updateUIWithImage(bgr, markersForDrawing, Colors.green);
+      }
+
+    } catch (e) {
+      if (kDebugMode) print('Nano error: $e');
+    } finally {
+      bgr?.dispose();
+      mat.dispose();
+    }
+  }
+
+  Future<cv.Mat?> _convertAndResizeImage(CameraImage image, {int scale = 2}) async {
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null) return;
+    if (format == null) return null;
 
     final bytes = switch (format) {
       InputImageFormat.yuv_420_888 => yuv420ToRGBA8888(image),
@@ -366,60 +460,131 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       }
     }
 
-    final targetWidth = mat.width ~/ 2;
-    final targetHeight = mat.height ~/ 2;
-    await cv.resizeAsync(mat, (targetWidth, targetHeight), dst: mat);
+    final targetWidth = mat.width ~/ scale;
+    final targetHeight = mat.height ~/ scale;
+    if (targetWidth > 0 && targetHeight > 0) {
+      await cv.resizeAsync(mat, (targetWidth, targetHeight), dst: mat);
+    }
 
-    cv.Mat? bgr;
+    return mat;
+  }
+
+  Future<void> _updateUIWithImage(cv.Mat bgr, List markers, Color markerColor) async {
     try {
-      bgr = await cv.cvtColorAsync(mat, cv.COLOR_RGBA2BGR);
-      final detectorStopwatch = Stopwatch()..start();
-      final markers = _arucoDetector.detect(bgr.data, bgr.width, bgr.height);
-      detectorStopwatch.stop();
-      final detectorTimeMs = detectorStopwatch.elapsedMicroseconds / 1000.0;
-
-      if (markers.isNotEmpty) {
-        _lastDetectedIds = markers.map((m) => m.id.toString()).join(', ');
-
-        print('✅ ArucoNano detection: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [${_lastDetectedIds}] | Size: ${bgr.width}x${bgr.height}');
-      } else {
-        _lastDetectedIds = 'none';
-      }
-
-      setState(() {
-        _detectedMarkers = markers;
-        _lastProcessingTimeMs = detectorTimeMs;
-      });
-
       final rgba = await cv.cvtColorAsync(bgr, cv.COLOR_BGR2RGBA);
       ui.Image uiImage = await rgba.toUiImage();
       rgba.dispose();
 
       if (markers.isNotEmpty) {
         final imageSize = ui.Size(bgr.width.toDouble(), bgr.height.toDouble());
-        uiImage = await _drawMarkersOnImage(uiImage, markers, imageSize);
+        uiImage = await _drawMarkersOnImage(uiImage, markers, imageSize, markerColor);
       }
 
-      setState(() {
-        _opencvPreviewImage = uiImage;
-      });
+      if (mounted) {
+        setState(() {
+          if (_processedPreviewImage != null && _processedPreviewImage != uiImage) {
+            _processedPreviewImage?.dispose();
+          }
+          _processedPreviewImage = uiImage;
+          _lastProcessingTime = _lastProcTime;
+          _lastDetectedIds = _lastIds;
+          _detectedMarkers = _lastMarkers;
+        });
+      } else {
+        uiImage.dispose();
+      }
+
+      final old = _lastProcessedImage;
+      _lastProcessedImage = uiImage;
+      if (old != null && old != uiImage) {
+        old.dispose();
+      }
+
     } catch (e) {
-      print('Detection error: $e');
-    } finally {
-      bgr?.dispose();
-      mat.dispose();
+      if (kDebugMode) print('UI update error: $e');
     }
   }
-  /// Display a row of toggle to select the camera (or a message if no camera is available).
+
+  Future<ui.Image> _drawMarkersOnImage(
+      ui.Image sourceImage, List<dynamic> markers, ui.Size imageSize, Color markerColor) async {
+    if (markers.isEmpty) return sourceImage;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    canvas.drawImage(sourceImage, Offset.zero, Paint());
+
+    final paint = Paint()
+      ..color = markerColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+
+    final scaleX = imageSize.width / sourceImage.width;
+    final scaleY = imageSize.height / sourceImage.height;
+
+    for (final marker in markers) {
+      final path = Path();
+      final corners = marker['corners'] as List<Offset>;
+      for (int i = 0; i < corners.length; i++) {
+        final point = Offset(
+            corners[i].dx * scaleX,
+            corners[i].dy * scaleY
+        );
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(path, paint);
+
+      final centerX = corners.map((c) => c.dx).reduce((a, b) => a + b) / 4 * scaleX;
+      final centerY = corners.map((c) => c.dy).reduce((a, b) => a + b) / 4 * scaleY;
+
+      final paragraphBuilder = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 20, fontWeight: FontWeight.bold))
+        ..pushStyle(ui.TextStyle(color: markerColor, fontSize: 20))
+        ..addText('ID: ${marker['id']}');
+      final paragraph = paragraphBuilder.build();
+      paragraph.layout(const ui.ParagraphConstraints(width: 200));
+      canvas.drawParagraph(paragraph, Offset(centerX - 30, centerY - 20));
+    }
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(sourceImage.width, sourceImage.height);
+    return img;
+  }
+
+  void _handleScaleStart(ScaleStartDetails details) {
+    _baseScale = _currentScale;
+  }
+
+  Future<void> _handleScaleUpdate(ScaleUpdateDetails details) async {
+    if (_pointers == 2) {
+      return;
+    }
+    if (controller == null) {
+      return;
+    }
+
+    final CameraController cameraController = controller!;
+
+    final double scale = _baseScale * details.scale;
+    final double zoom = (scale - 1.0) * (_maxAvailableZoom - _minAvailableZoom) + _minAvailableZoom;
+
+    await cameraController.setZoomLevel(zoom);
+
+    _currentScale = scale;
+  }
+
   Widget _cameraTogglesRowWidget() {
     final cameraController = controller;
-    final List<Widget> toggles = <Widget>[];
+    final List<Widget> toggles = [];
 
     void onChanged(CameraDescription? description) {
       if (description == null) {
         return;
       }
-
       onNewCameraSelected(description);
     }
 
@@ -432,8 +597,8 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       for (final CameraDescription cameraDescription in _cameras) {
         toggles.add(
           SizedBox(
-            width: 150.0,
-            child: RadioListTile<CameraDescription>(
+            width: 120.0,
+            child: RadioListTile(
               title: Icon(getCameraLensIcon(cameraDescription.lensDirection)),
               groupValue: controller?.description,
               value: cameraDescription,
@@ -451,7 +616,7 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       ),
     );
 
-    return Row(children: toggles);
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: toggles);
   }
 
   String timestamp() => DateTime.now().millisecondsSinceEpoch.toString();
@@ -475,20 +640,20 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     cameraController.setFocusPoint(offset);
   }
 
-  Future<void> onNewCameraSelected(CameraDescription cameraDescription) async {
+  Future onNewCameraSelected(CameraDescription cameraDescription) async {
     if (controller != null) {
       await controller!.stopImageStream();
       await controller!.setDescription(cameraDescription);
-      await controller!.startImageStream(_processImage);
+      await controller!.startImageStream(_processFrame);
     } else {
       return _initializeCameraController(cameraDescription);
     }
   }
 
-  Future<void> _initializeCameraController(CameraDescription cameraDescription) async {
+  Future _initializeCameraController(CameraDescription cameraDescription) async {
     final CameraController cameraController = CameraController(
       cameraDescription,
-      kIsWeb ? ResolutionPreset.max : ResolutionPreset.high,
+      kIsWeb ? ResolutionPreset.max : ResolutionPreset.medium, // Используем medium для производительности
       enableAudio: enableAudio,
       imageFormatGroup: Platform.isAndroid
           ? ImageFormatGroup.yuv420
@@ -497,7 +662,6 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
     controller = cameraController;
 
-    // If the controller is updated then update the UI.
     cameraController.addListener(() {
       if (mounted) {
         setState(() {});
@@ -509,8 +673,8 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
     try {
       await cameraController.initialize();
-      await cameraController.startImageStream(_processImage);
-      await Future.wait(<Future<Object?>>[
+      await cameraController.startImageStream(_processFrame);
+      await Future.wait([
         cameraController.getMaxZoomLevel().then((double value) => _maxAvailableZoom = value),
         cameraController.getMinZoomLevel().then((double value) => _minAvailableZoom = value),
       ]);
@@ -519,18 +683,14 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
         case 'CameraAccessDenied':
           showInSnackBar('You have denied camera access.');
         case 'CameraAccessDeniedWithoutPrompt':
-        // iOS only
           showInSnackBar('Please go to Settings app to enable camera access.');
         case 'CameraAccessRestricted':
-        // iOS only
           showInSnackBar('Camera access is restricted.');
         case 'AudioAccessDenied':
           showInSnackBar('You have denied audio access.');
         case 'AudioAccessDeniedWithoutPrompt':
-        // iOS only
           showInSnackBar('Please go to Settings app to enable audio access.');
         case 'AudioAccessRestricted':
-        // iOS only
           showInSnackBar('Audio access is restricted.');
         default:
           _showCameraException(e);
@@ -543,7 +703,7 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     }
   }
 
-  Future<void> onPausePreviewButtonPressed() async {
+  Future onPausePreviewButtonPressed() async {
     final CameraController? cameraController = controller;
 
     if (cameraController == null || !cameraController.value.isInitialized) {
@@ -552,7 +712,7 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     }
 
     if (cameraController.value.isPreviewPaused) {
-      await cameraController.startImageStream(_processImage);
+      await cameraController.startImageStream(_processFrame);
       await cameraController.resumePreview();
     } else {
       await cameraController.stopImageStream();
@@ -583,15 +743,10 @@ class CameraApp extends StatelessWidget {
   }
 }
 
-List<CameraDescription> _cameras = <CameraDescription>[];
+List<CameraDescription> _cameras = [];
 
-Future<void> main() async {
-  // Fetch the available cameras before initializing the app.
-  try {
-    WidgetsFlutterBinding.ensureInitialized();
-    _cameras = await availableCameras();
-  } on CameraException catch (e) {
-    _logError(e.code, e.description);
-  }
+Future main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  _cameras = await availableCameras();
   runApp(const CameraApp());
 }

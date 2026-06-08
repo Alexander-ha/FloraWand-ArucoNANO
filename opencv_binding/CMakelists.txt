@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.10)
+project(aruco_classic)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_library(aruco_classic SHARED aruco_classic.cpp)
+set(OPENCV_BASE "C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native")
+set(OPENCV_3RDPARTY "${OPENCV_BASE}/3rdparty/libs/arm64-v8a")
+
+target_include_directories(aruco_classic PRIVATE
+        ${OPENCV_BASE}/jni/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+set(THIRDPARTY_LIBS
+        ${OPENCV_3RDPARTY}/libade.a
+        ${OPENCV_3RDPARTY}/libcpufeatures.a
+        ${OPENCV_3RDPARTY}/libIlmImf.a
+        ${OPENCV_3RDPARTY}/libkleidicv.a
+        ${OPENCV_3RDPARTY}/libkleidicv_hal.a
+        ${OPENCV_3RDPARTY}/libkleidicv_thread.a
+        ${OPENCV_3RDPARTY}/liblibjpeg-turbo.a
+        ${OPENCV_3RDPARTY}/liblibopenjp2.a
+        ${OPENCV_3RDPARTY}/liblibpng.a
+        ${OPENCV_3RDPARTY}/liblibprotobuf.a
+        ${OPENCV_3RDPARTY}/liblibtiff.a
+        ${OPENCV_3RDPARTY}/liblibwebp.a
+        ${OPENCV_3RDPARTY}/libquirc.a
+        ${OPENCV_3RDPARTY}/libtegra_hal.a
+        ${OPENCV_3RDPARTY}/libzlib.a
+)
+
+target_link_libraries(aruco_classic
+        -Wl,--start-group
+        ${OPENCV_BASE}/staticlibs/arm64-v8a/libopencv_objdetect.a
+        ${OPENCV_BASE}/staticlibs/arm64-v8a/libopencv_calib3d.a
+        ${OPENCV_BASE}/staticlibs/arm64-v8a/libopencv_imgproc.a
+        ${OPENCV_BASE}/staticlibs/arm64-v8a/libopencv_core.a
+        ${OPENCV_BASE}/staticlibs/arm64-v8a/libopencv_features2d.a
+        ${OPENCV_BASE}/staticlibs/arm64-v8a/libopencv_flann.a
+        ${THIRDPARTY_LIBS}
+        -Wl,--end-group
+        log
+        android
+        c++_shared
+)
+
+set_target_properties(aruco_classic PROPERTIES
+        PREFIX "lib"
+        SUFFIX ".so"
+)
