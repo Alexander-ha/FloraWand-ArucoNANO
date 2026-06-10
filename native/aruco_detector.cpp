@@ -12,19 +12,8 @@ public:
     aruco_nano::DetectorParameters params;
 
     ArucoDetectorWrapper() {
-        params.boxFilterSize = 15;
-        params.thres = 3;
-        params.minSize = 10;
-        params.maxAttemptsPerCandidate = 5;
-        params.maxTimesRevisited = 0.05f;
-        params.errorCorrectionRate = 0;
-        params.maxErroneousBitsInBorderRate = 0.0;
-        params.detectInvertedMarker = false;
-        auto dict = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_4X4_250);
-        params.dicts = {dict};
         detector = aruco_nano::ArucoDetector(params.dicts, params);
-    }
-};
+    }};
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,9 +42,9 @@ int detect_markers(
 
     auto* wrapper = static_cast<ArucoDetectorWrapper*>(handle);
 
-    cv::Mat rgba(height, width, CV_8UC4, const_cast<uint8_t*>(data));
-    cv::Mat bgr;
-    cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+    cv::Mat bgr(height, width, CV_8UC3, const_cast<uint8_t*>(data));
+    //cv::Mat bgr;
+    //cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
 
     /*cv::Mat resized;
     if (width > 640) {
@@ -95,8 +84,8 @@ int detect_markers(
         ids[i] = detected_ids[i];
         const auto& corners_vec = detected_corners[i];
         for (int j = 0; j < 4; j++) {
-            corners[i * 8 + j * 2] = corners_vec[j].x * scale_x;
-            corners[i * 8 + j * 2 + 1] = corners_vec[j].y * scale_y;
+            corners[i * 8 + j * 2] = corners_vec[j].x;
+            corners[i * 8 + j * 2 + 1] = corners_vec[j].y;
         }
     }
 

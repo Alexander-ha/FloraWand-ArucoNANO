@@ -749,6 +749,7 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/optim.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/core/ovx.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/./imgproc/segmentation.hpp \
+  C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/android/log.h \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/calib3d.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/features2d.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/flann/miniflann.hpp \
@@ -842,5 +843,4 @@ CMakeFiles/aruco_detector.dir/aruco_detector.cpp.o: \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/stitching/detail/blenders.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video.hpp \
   C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video/tracking.hpp \
-  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video/background_segm.hpp \
-  C:/Users/alexa/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/android/log.h
+  C:/Users/alexa/AppData/Local/Pub/Cache/hosted/pub.dev/opencv_core-1.4.5/android/.cxx/Debug/4n16304y/arm64-v8a/_deps/libopencv-src/sdk/native/jni/include/opencv2/video/background_segm.hpp
