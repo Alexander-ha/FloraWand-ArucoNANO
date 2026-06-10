@@ -5,7 +5,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
-
+import 'package:flora_nano_aruco/plant_api_fw.dart';
 import 'package:camera/camera.dart';
 import 'package:flora_nano_aruco/input_image.dart';
 import 'package:flora_nano_aruco/utils.dart';
@@ -50,12 +50,21 @@ enum DetectorType {
   nano,
 }
 
+
+
+
 class _CameraExampleHomeState extends State<CameraExampleHome>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   CameraController? controller;
   bool enableAudio = true;
   late ArucoDetector _arucoDetector;
   late ArucoClassicDetector _classicDetector;
+  Map<String, dynamic>? _currentPlantData;
+  Timer? _displayTimer;
+  String? _currentDisplayedMarkerId;
+  bool _isLoading = false;
+  final PlantApiService _apiService = PlantApiService();
+
 
   DetectorType _activeDetector = DetectorType.classic;
 
@@ -104,6 +113,8 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     _classicDetector.dispose();
     _lastProcessedImage?.dispose();
     _processedPreviewImage?.dispose();
+    _displayTimer?.cancel();
+    _currentPlantData = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -122,7 +133,6 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       _initializeCameraController(cameraController.description);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -150,123 +160,221 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // ОДНА КАМЕРА с обработанным изображением
-          Expanded(
-            flex: 3,
-            child: Container(
-              margin: const EdgeInsets.all(5),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _activeDetector == DetectorType.classic ? 'Classic ArUco (C++)' : 'ArUco Nano',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          Column(
+            children: [
+              Expanded(
+                flex: 3,
+                child: Container(
+                  margin: const EdgeInsets.all(5),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _activeDetector == DetectorType.classic ? 'Classic ArUco (C++)' : 'ArUco Nano',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            Icon(
+                              _activeDetector == DetectorType.classic ? Icons.code : Icons.speed,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ],
                         ),
+                      ),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: ColoredBox(
+                            color: Colors.black,
+                            child: _processedPreviewImage == null
+                                ? const Center(
+                              child: Text(
+                                "Waiting for camera...",
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            )
+                                : RawImage(
+                              image: _processedPreviewImage,
+                              fit: BoxFit.contain,
+                              filterQuality: FilterQuality.low,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(12.0),
+                color: Colors.black87,
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         Icon(
-                          _activeDetector == DetectorType.classic ? Icons.code : Icons.speed,
-                          color: Colors.white,
+                          _activeDetector == DetectorType.classic ? Icons.timer : Icons.speed,
+                          color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
                           size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_activeDetector == DetectorType.classic ? "Classic" : "Nano"}: ${_lastProcessingTime.toStringAsFixed(1)} ms',
+                          style: TextStyle(
+                            color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        const Icon(Icons.qr_code, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'IDs: $_lastDetectedIds',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                  ),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: ColoredBox(
-                        color: Colors.black,
-                        child: _processedPreviewImage == null
-                            ? const Center(
-                          child: Text(
-                            "Waiting for camera...",
-                            style: TextStyle(color: Colors.white),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[800],
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        )
-                            : RawImage(
-                          image: _processedPreviewImage,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.low,
+                          child: Text(
+                            'Tap to switch detector',
+                            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(5.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _cameraTogglesRowWidget(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_currentPlantData != null && !_isLoading)
+            Positioned(
+              top: 60,
+              left: 10,
+              right: 10,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green, width: 2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.eco, color: Colors.green, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Plant #${_currentPlantData!['plant_id']}',
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[800],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'Updates every 20 sec',
+                            style: TextStyle(color: Colors.white70, fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _buildInfoRow(Icons.water_drop, 'Water:', _currentPlantData!['water_lvl'], '%', Colors.blue),
+                    _buildInfoRow(Icons.light_mode, 'Light:', _currentPlantData!['light_lvl'], ' lux', Colors.amber),
+                    _buildInfoRow(Icons.thermostat, 'Temp:', _currentPlantData!['temp_lvl'], '°C', Colors.red),
+                    _buildInfoRow(Icons.opacity, 'Humidity:', _currentPlantData!['humidity_lvl'], '%', Colors.teal),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time, size: 12, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Measured: ${_formatDateTime(_currentPlantData!['measured_at'])}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 10),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // Информация о детекции
-          Container(
-            padding: const EdgeInsets.all(12.0),
-            color: Colors.black87,
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _activeDetector == DetectorType.classic ? Icons.timer : Icons.speed,
-                      color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${_activeDetector == DetectorType.classic ? "Classic" : "Nano"}: ${_lastProcessingTime.toStringAsFixed(1)} ms',
-                      style: TextStyle(
-                        color: _activeDetector == DetectorType.classic ? Colors.blue : Colors.green,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 20),
-                    const Icon(Icons.qr_code, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'IDs: $_lastDetectedIds',
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Tap to switch detector',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          if (_isLoading)
+            const Center(
+              child: CircularProgressIndicator(),
             ),
-          ),
+        ],
+      ),
+    );
+  }
 
-          Padding(
-            padding: const EdgeInsets.all(5.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _cameraTogglesRowWidget(),
-              ],
-            ),
+  Widget _buildInfoRow(IconData icon, String label, dynamic value, String unit, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+          const SizedBox(width: 8),
+          Text(
+            value != null ? '$value$unit' : '—',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDateTime(String isoString) {
+    try {
+      final dt = DateTime.parse(isoString);
+      return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return isoString;
+    }
   }
 
   void _toggleDetector() {
@@ -336,7 +444,7 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
   }
 
   Future<void> _processImageClassicOptimized(CameraImage image) async {
-    final mat = await _convertAndResizeImage(image, scale: 1); // Уменьшаем в 3 раза для скорости
+    final mat = await _convertAndResizeImage(image, scale: 1);
     if (mat == null) return;
 
     cv.Mat? bgr;
@@ -352,6 +460,10 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
 
       _lastProcTime = detectorTimeMs;
       if (markers.isNotEmpty) {
+        final firstMarkerId = markers.first['id'].toString();
+        if (_currentDisplayedMarkerId != firstMarkerId) {
+          _requestAndDisplayData(firstMarkerId);
+        }
         _lastIds = markers.map((m) => m['id'].toString()).join(',');
         if (kDebugMode) {
           print('✅ Classic ArUco: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [$_lastIds]');
@@ -361,7 +473,6 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       }
       _lastMarkers = markers;
 
-      // Обновляем UI не чаще чем _uiUpdateEveryNFrames
       _uiUpdateCounter++;
       if (_uiUpdateCounter >= _uiUpdateEveryNFrames) {
         _uiUpdateCounter = 0;
@@ -373,6 +484,36 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
     } finally {
       bgr?.dispose();
       mat.dispose();
+    }
+  }
+
+  Future<void> _requestAndDisplayData(String markerId) async {
+    if (_currentDisplayedMarkerId == markerId && _displayTimer?.isActive == true) {
+      return;
+    }
+    _displayTimer?.cancel();
+    setState(() {
+      _currentPlantData = null;
+      _currentDisplayedMarkerId = null;
+    });
+    setState(() => _isLoading = true);
+    final result = await _apiService.fetchPlantData(int.parse(markerId));
+    setState(() => _isLoading = false);
+
+    if (result['status'] == 'success') {
+      setState(() {
+        _currentPlantData = result['data'];
+        _currentDisplayedMarkerId = markerId;
+      });
+      _displayTimer = Timer(const Duration(seconds: 20), () {
+        if (_currentDisplayedMarkerId == markerId) {
+          _requestAndDisplayData(markerId);
+        }
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка: ${result['message']}')),
+      );
     }
   }
 
@@ -388,9 +529,12 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       final markers = result.markers;
       final detectorTimeMs = result.processingTimeMs;
 
-      // Сохраняем результаты
       _lastProcTime = detectorTimeMs;
       if (markers.isNotEmpty) {
+        final firstMarkerId = markers.first.id.toString();
+        if (_currentDisplayedMarkerId != firstMarkerId) {
+          _requestAndDisplayData(firstMarkerId);
+        }
         _lastIds = markers.map((m) => m.id.toString()).join(',');
         if (kDebugMode) {
           print('✅ ArUco Nano: ${detectorTimeMs.toStringAsFixed(3)} ms | Markers: [$_lastIds]');
@@ -405,7 +549,6 @@ class _CameraExampleHomeState extends State<CameraExampleHome>
       }).toList();
       _lastMarkers = markersForDrawing;
 
-      // Обновляем UI
       _uiUpdateCounter++;
       if (_uiUpdateCounter >= _uiUpdateEveryNFrames) {
         _uiUpdateCounter = 0;
